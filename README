@@ -1,0 +1,17 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=4732
+
+GitHub repository: https://github.com/someboddy/vim-integrake
+
+Build systems were originally created to script the build process, but they can do much more - they are actually a great way to organize and run all the project-specific, development-related scripts. You can keep all the scripts for running the project, running unit-tests, cleaning, deploying etc. as different tasks(or targets) in a single build file, and easily run specific tasks from the command-line.
+
+Integrake takes this one step farther - it uses Vim's ruby interface and the Rake API to load Rakefiles and run Rake tasks inside the Vim environment. Integrake tasks, are written in Ruby - which means power, elegance and access to any gem you want - and executed in the environment of the current Vim instance - which means you can interact with the buffers, change settings, modify global Vim variables and execute the commands of your Vim plugins.
+
+Integrake also assists in creation and editing those Integrake tasks, and allows you to easily copy project-type-general Integrake file that you made in advance.
+
+For example - you might always want a :run task that runs your project with specific input(that you often change) and see if it behaves like you want.
+
+    If the project is a command line application - you will simply want execute it in a shell. Nothing fancy here.
+    If it's a web service, you want to send an HTTP request to it and display the result. Since Integrake is written with Ruby, you can use Ruby's default HTTP library - install an alternative, easier-to-use library using RubyGems - to easily send that request.
+    Some languages and frameworks are painful to run from the command line, but have a Vim plugin that helps running their projects. Since Integrake runs in the environment of the current Vim instance, you can use those plugins from inside the :run task.
+
+Since you always use the same task name - :run - you can have a global key mapping that runs your project in the appropriate way, no matter which type of project it is. And since the task is defined in a file in the project's directory, you can easily change the run arguments to test different things in your project, without having to remap the key.
