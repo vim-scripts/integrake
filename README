@@ -1,6 +1,6 @@
 This is a mirror of http://www.vim.org/scripts/script.php?script_id=4732
 
-GitHub repository: https://github.com/someboddy/vim-integrake
+GitHub repository: https://github.com/idanarye/vim-integrake
 
 Build systems were originally created to script the build process, but they can do much more - they are actually a great way to organize and run all the project-specific, development-related scripts. You can keep all the scripts for running the project, running unit-tests, cleaning, deploying etc. as different tasks(or targets) in a single build file, and easily run specific tasks from the command-line.
 
