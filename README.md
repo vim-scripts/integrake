@@ -91,7 +91,7 @@ you use Windows) and by plugins like NERDTree.
 
 Example:
 ```vim
-    let g:integrake_filePrefix='.idanarye'
+let g:integrake_filePrefix = '.idanarye'
 ```
 If you want to use `integrake-templates` - premade files that you can easily
 grab for new projects - you need to set `g:integrake_grabDirs` to a
@@ -99,7 +99,7 @@ directory(or a list of directories) that contain those templates.
 
 Example:
 ```vim
-    let g:integrake_grabDirs=[expand('<sfile>:p:h').'/my-configurations/integrake-templates']
+let g:integrake_grabDirs = [expand('<sfile>:p:h').'/my-configurations/integrake-templates']
 ```
 
 CREATING TASKS
@@ -170,31 +170,31 @@ around `VIM::Windows.current`.
 Any vim function can be called directly from Integrake by using the function's
 name. Example:
 ```ruby
-    puts expand('%')
+puts expand('%')
 ```
 will print the name of the current file.
 
 Any vim command can be called directly from Integrake by using the command's
 full name. Example:
 ```ruby
-    edit 'foo.txt'
+edit 'foo.txt'
 ```
 will edit the file `foo.txt`. The arguments are not escaped, so
 ```ruby
-    echo 'hello'
+echo 'hello'
 ```
 will not print `hello` - it will try to print a variable named `hello`. To
 print the string `hello` with `echo`, use
 ```ruby
-    echo '"hello"'
+echo '"hello"'
 ```
 
 `var` can be used like an hash to read and write variables. Example:
 ```ruby
-    var['g:foo']=12
-    cmd 'echo g:foo' #prints 12
-    cmd 'let g:foo=14'
-    puts var['g:foo'] #prints 14
+var['g:foo'] = 12
+cmd 'echo g:foo' #prints 12
+cmd 'let g:foo = 14'
+puts var['g:foo'] #prints 14
 ```
 
 `to_vim` will turn any object into a VimScript literal. Ruby strings and
@@ -211,5 +211,158 @@ To load a Ruby file that might change in Integrake use `Integrake.load`
 instead of Ruby's `load`. this will ensure that if the file is changed it will
 be reloaded.
 
-You can also put *.rb files in `integrake` directories in Vim's runtime path to
+You can also put \*.rb files in `integrake` directories in Vim's runtime path to
 make Integrake load them automatically.
+
+
+PASSING DATA FROM PREREQUISITES
+===============================
+
+Integrake has a mechanism for passing data from prerequisite tasks to the task
+that called them. The data is passed only to task that has the passer as a
+direct prerequisite(though task higher in the chain can add that prerequisite,
+and it'll only be called once and pass the same data to all the tasks that
+require it).
+
+To pass data, from the prerequisite task call the `pass_data` method of the
+task object(the first argument to the Ruby block defining the task). To use
+that data in the caller task, use the subscript operator of the caller task
+object with the name of the task that passed the data. So, if this is our
+integrake file:
+```ruby
+task :data_passer do|t|
+    t.pass_data 'some data'
+end
+
+task :data_user => [:data_passer] do|t|
+    puts t[:data_passer]
+end
+```
+Calling `:IR data_user` will print "some data".
+
+
+OPTIONS CHOOSER TASKS
+=====================
+
+Integrake's options chooser tasks allows you to define options you can use in
+your tasks, with a selection interface that remembers your decisions for
+minimal interference with your workflow. To create such an option, use the
+`Integrake.option` method, where the first argument is the name of the option
+and the rest of the arguments are the options to choose from:
+```ruby
+Integrake.option :color, :red,:green,:blue
+
+task :print_chosen_color => [:color] do|t|
+    puts t[:color]
+end
+```
+With this, when we first run `:IR print_chosen_color` we are prompted to
+choose a color, and then that color name is printed. If we run it again - we
+get the same color without being prompted! If we want to be prompted again, we
+need to run `:IR color` directly.
+
+You can also use hash arguments:
+```ruby
+Integrake.option :number,
+    'ten' => 10,
+    'twenty' => 20
+```
+With this, the keys will be displayed when you are prompted, but the data
+you'll get with the subscript operator is the value of the chosen key.
+
+
+WINDOW PREPARATION TASKS
+========================
+
+Sometimes you need a window to be there before you run a plugin. For example,
+using the vimshell plugin, you might want to open a vimshell terminal and
+run "make" in it. However, you don't want to open the terminal if it's alredy
+open. So - you use the `Integrake.window` helper to build a window preparation
+task:
+
+```ruby
+Integrake.window :'open-shell' do
+    VimShellCreate '-split'
+end
+
+task :build => :'open-shell' do|t|
+    VimShellSendString 'make'
+end
+```
+
+With this, when we run `:IR build` it'll first call the "open-shell" task,
+which will create the vimshell window, and then run "make" in it. If we call it
+again, it'll recognize the window is already open and not create it again.  But
+if we close the vimshell window and run it, it won't be able to find that
+window and reopen it. That way the "build" task will always have a vimshell
+window, be it a freshly created one or an already existing one.
+
+A window preparation task will use the integrake `pass_data` mechanism to pass
+the window object of that window.
+
+A window preparation task must end when the active window is a new window. If
+the active window already existed before the task the task will fail.
+
+
+AUTO COMPLETION
+===============
+
+Integrake supports custom autocompletion for task arguments. To create a
+custom completion call the "complete" method of the task object, and pass to
+it a block that accepts the array of the command parts before the
+cursor(including `IR` and the task name) and returns a list of completions.
+Take note that Integrake does not filter your results to match the argument
+you are trying to complete - but `parts` has the `filter_completions` method
+that does just that.
+
+The following example will add autocompletion for the colors "red", "green"
+and "blue" to the task `print_color`:
+
+```ruby
+task :print_color, [:color] do|t, args|
+    puts args[:color]
+end.complete do|parts|
+    parts.filter_completions(['red', 'green', 'blue'])
+end
+```
+
+
+You can also use prepared autocompletion by passing the prepared
+autocompletion name as the first argument to `complete`. For example, to
+complete a single file use:
+
+```ruby
+task :file_size, [:filename] do|t, args|
+    puts File.stat(args[:filename]).size
+end.complete :file
+```
+
+The prepared autocompletion supplied with Integrake are:
+
+ - `:file` - filename for the first argument. Accepts a second argument as the
+   root for searching.
+ - `:files` - filename for all arguments. Accepts a second argument as the root
+   for searching.
+ - `:dir` - directory for the first argument. Accepts a second argument as the
+   root for searching.
+ - `:dirs` - directory for all arguments. Accepts a second argument as the root
+   for searching.
+
+To create your own prepared autocompletion, use
+`Integrake.register_completer`. Pass to it as argument the name of the
+completer, and it's block should accept completer arguments and return a
+callable object that accepts the `parts` argument and will serve as the
+completer itself. So, the `print_color` task from before could be created like
+so:
+
+```ruby
+Integrake.register_completer :color do|*colors|
+    lambda do|parts|
+        parts.filter_completions(colors)
+    end
+end
+
+task :print_color, [:color] do|t, args|
+    puts args[:color]
+end.complete :color, 'red', 'green', 'blue'
+```
