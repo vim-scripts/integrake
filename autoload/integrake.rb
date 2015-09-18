@@ -174,6 +174,37 @@ class IntegrakeEnvironment
     def do_in_window(window_identifier, &block)
         return do_in_windows(find_window_number(window_identifier), &block).values.first
     end
+
+    def input_list(prompt, options)
+        take_from = 0
+        while take_from < options.length
+            take_this_time = VAR['&lines'] - 2
+            more_items_remaining = take_from + take_this_time < options.length
+            if more_items_remaining
+                take_this_time -= 1
+            end
+            options_slice = options[take_from ... (take_from + take_this_time)]
+            take_from += take_this_time
+
+            number_length = options_slice.count.to_s.length
+
+            list_for_input_query = (more_items_remaining ? options_slice + ["*MORE*"] : options_slice).each_with_index.map do|option, index|
+                index_text = (index + 1).to_s
+                "#{index_text})#{' '*(number_length - index_text.length)} #{option}"
+            end
+            list_for_input_query.unshift(prompt)
+            chosen_option_number = VIM::evaluate("inputlist(#{list_for_input_query.to_vim})")
+
+            if more_items_remaining and chosen_option_number == options_slice.length + 1
+                puts ' '
+                next
+            elsif chosen_option_number < 1 or options_slice.length < chosen_option_number
+                return nil
+            else
+                return options_slice[chosen_option_number - 1]
+            end
+        end
+    end
 end
 
 VAR = Object.new
@@ -457,11 +488,11 @@ module Integrake
                    }
                end
         if $range and [:char, :block].include?($range[:type])
-            if $range[:line1] == vim_call(:line, "'<") and $range[:line2]==vim_call(:line, "'>")
-                $range[:col1] = vim_call(:col, "'<")
-                $range[:col2] = vim_call(:col, "'>")
-                $range[:vcol1] = vim_call(:virtcol, "'<")
-                $range[:vcol2] = vim_call(:virtcol, "'>")
+            if $range[:line1] == @@integrake_environment.vim_call(:line, "'<") and $range[:line2] == @@integrake_environment.vim_call(:line, "'>")
+                $range[:col1] = @@integrake_environment.vim_call(:col, "'<")
+                $range[:col2] = @@integrake_environment.vim_call(:col, "'>")
+                $range[:vcol1] = @@integrake_environment.vim_call(:virtcol, "'<")
+                $range[:vcol2] = @@integrake_environment.vim_call(:virtcol, "'>")
             else
                 $range[:type] = :line
             end
@@ -624,14 +655,25 @@ module Integrake
                                else
                                    options
                                end
-            tsk = Rake.application.define_task self, name do|t|
+            options_strings = options_captions.map(&:to_s)
+            tsk = Rake.application.define_task self, name, [:option] do|t, args|
                 if options.is_a? Hash
                     @@cache.delete name if options[@@cache[name]].nil?
                 else
                     @@cache.delete name unless options.include? @@cache[name]
                 end
-                if Rake.application.top_level_tasks.include?(name.to_s) or @@cache[name].nil?
-                    chosen_option = prompt_for_options(name, options_captions)
+                if not args[:option].nil?
+                    chosen_index = options_strings.index(args[:option])
+                    chosen_option = if chosen_index.nil?
+                                        puts "'#{args[:option]}' is not a valid option for #{name}"
+                                        chosen_option = nil
+                                    else
+                                        options_captions[chosen_index]
+                                    end
+                    @@cache[name] = chosen_option
+                elsif Rake.application.top_level_tasks.include?(name.to_s) or @@cache[name].nil?
+                    #chosen_option = prompt_for_options(name, options_captions)
+                    chosen_option = Integrake.environment.input_list("Chose #{name}:", options_captions)
                     @@cache[name] = chosen_option
                 else
                     chosen_option = @@cache[name]
@@ -643,6 +685,17 @@ module Integrake
                 end
             end
             tsk.locations << caller.select{|e| not e.start_with? __FILE__}.first
+
+            tsk.complete :list, options_strings
+
+            Rake.application.define_task self, :"#{name}?" do
+                chosen_option = @@cache[name]
+                if chosen_option.nil?
+                    puts "#{name} not selected"
+                else
+                    puts "#{name}: #{chosen_option}"
+                end
+            end
         end
 
         private
@@ -752,4 +805,9 @@ Integrake.register_completer :files do|root_path = '.'|
 end
 Integrake.register_completer :dirs do|root_path = '.'|
     filename_completer_creator.call root_path, true, nil
+end
+Integrake.register_completer :list do|items|
+    lambda do|parts|
+        parts.filter_completions(items)
+    end
 end
